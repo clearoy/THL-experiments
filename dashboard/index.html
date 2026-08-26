@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolicyInduction on COMPAS</title>
+<style>
+  :root{
+    --bg:#fbfbfa; --panel:#fff; --ink:#1a1a19; --muted:#6b6b66; --line:#e4e4e0;
+    --accent:#8b5a3c; --accent-soft:#f5efe9; --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#17171a; --panel:#1e1e22; --ink:#eceae6; --muted:#9a978f;
+           --line:#2e2e34; --accent:#d69a72; --accent-soft:#2a2320; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;}
+  .wrap{max-width:940px;margin:0 auto;padding:48px 24px 80px}
+  header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:40px}
+  h1{font-size:28px;margin:0 0 8px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:14px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--accent);
+     margin:44px 0 16px;font-weight:600}
+  h3{font-size:15px;margin:26px 0 10px;font-weight:600}
+  p{margin:0 0 14px}
+  .muted{color:var(--muted)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);
+       padding:1px 5px;border-radius:3px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+        padding:20px 22px;margin-bottom:16px}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);
+        white-space:nowrap}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+     font-weight:600}
+  td.n{font-family:var(--mono);text-align:right}
+  tr.hi td{background:var(--accent-soft);font-weight:600}
+  tr.base td{color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+  .stat b{display:block;font-size:24px;font-family:var(--mono);letter-spacing:-.02em}
+  .stat span{font-size:12px;color:var(--muted)}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:13px;margin:6px 0 4px}
+  .step{background:var(--accent-soft);border:1px solid var(--line);border-radius:6px;
+        padding:7px 11px;font-family:var(--mono);font-size:12px}
+  .arrow{color:var(--muted)}
+  ul{margin:0 0 14px;padding-left:20px} li{margin-bottom:5px}
+  a{color:var(--accent)}
+  .pol{border-left:2px solid var(--line);padding:2px 0 2px 14px;margin-bottom:12px;font-size:14px}
+  .w{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600}
+  .pos{color:var(--muted)}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);
+         font-size:12px;color:var(--muted)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--accent-soft);
+      padding:12px 14px;border-radius:6px;overflow-x:auto;margin:0 0 14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>PolicyInduction on COMPAS</h1>
+  <div class="sub">LLM-induced natural-language policies vs. traditional ML &middot;
+    2-year recidivism &middot; think-reason-learn <code>e1cf0ed</code></div>
+</header>
+
+<h2>1 &nbsp;Dataset</h2>
+
+<div class="grid">
+  <div class="stat"><b>6,172</b><span>rows after ProPublica filter</span></div>
+  <div class="stat"><b>45.5%</b><span>positive (re-arrest in 2 yrs)</span></div>
+  <div class="stat"><b>8</b><span>features</span></div>
+  <div class="stat"><b>4,320 / 1,852</b><span>train / test split</span></div>
+</div>
+
+<p class="muted" style="margin-top:14px">ProPublica COMPAS, Broward County FL
+  2013&ndash;2014. Target <code>two_year_recid</code>: re-arrest within two years
+  of screening. Raw file has 7,214 rows; ProPublica's published filter reduces it
+  to the canonical 6,172.</p>
+
+<h3>Features used</h3>
+<div class="card scroll">
+  <table>
+    <tr><th>Feature</th><th>Meaning</th></tr>
+    <tr><td><code>sex</code></td><td>Male / Female</td></tr>
+    <tr><td><code>age_years</code></td><td>Age at screening (18&ndash;96)</td></tr>
+    <tr><td><code>age_group</code></td><td>under 25 / 25 to 45 / over 45</td></tr>
+    <tr><td><code>prior_offense_count</code></td><td>Prior adult offenses (0&ndash;38)</td></tr>
+    <tr><td><code>juvenile_felony_convictions</code></td><td>Juvenile felonies</td></tr>
+    <tr><td><code>juvenile_misdemeanor_convictions</code></td><td>Juvenile misdemeanors</td></tr>
+    <tr><td><code>juvenile_other_offenses</code></td><td>Other juvenile offenses</td></tr>
+    <tr><td><code>current_charge_severity</code></td><td>Felony / Misdemeanor</td></tr>
+  </table>
+</div>
+
+<p class="muted">Excluded: COMPAS's own risk scores and post-outcome fields
+  (leakage), names and DOB (PII), and <code>race</code> (following CORELS).</p>
+
+<h3>How PolicyInduction consumes them</h3>
+<p>No prose conversion. Each row is flattened to <code>column: value</code> lines
+  and handed to the LLM as-is, so it receives the same information the sklearn
+  baselines do.</p>
+
+<pre>sex: Male                              Policies:
+age_years: 39                          id=0: Defendants with 6 or more prior
+age_group: 25 to 45                          offenses are likely to reoffend.
+prior_offense_count: 9         +       id=1: ...
+juvenile_felony_convictions: 0
+current_charge_severity: Felony        &rarr; one YES/NO answer per policy id</pre>
+
+<div class="flow">
+  <span class="step">generate policies</span><span class="arrow">&rarr;</span>
+  <span class="step">score each policy &times; sample</span><span class="arrow">&rarr;</span>
+  <span class="step">binary matrix</span><span class="arrow">&rarr;</span>
+  <span class="step">L1 logistic regression</span><span class="arrow">&rarr;</span>
+  <span class="step">YES / NO</span>
+</div>
+<p class="muted">The LLM writes natural-language policies from labelled batches,
+  answers YES/NO for every (policy, sample) pair, and those answers become the
+  binary feature matrix a logistic regression is fitted on. The regression's
+  weights decide which policies matter.</p>
+
+<h3>Papers evaluating ML on this dataset</h3>
+<div class="card scroll">
+  <table>
+    <tr><th>Paper</th><th>Contribution</th><th>Accuracy</th></tr>
+    <tr><td><a href="https://www.propublica.org/article/how-we-analyzed-the-compas-recidivism-algorithm">Angwin et&nbsp;al. 2016</a><br><span class="pos">ProPublica</span></td>
+        <td>Released the dataset; found racial disparity in error rates</td>
+        <td class="n">&mdash;</td></tr>
+    <tr><td><a href="https://jmlr.org/papers/v18/17-716.html">Angelino et&nbsp;al. 2018</a><br><span class="pos">JMLR &middot; CORELS</span></td>
+        <td>Certifiably optimal rule lists match random-forest accuracy</td>
+        <td class="n">~65%</td></tr>
+    <tr><td><a href="https://www.science.org/doi/10.1126/sciadv.aao5580">Dressel &amp; Farid 2018</a><br><span class="pos">Science Advances</span></td>
+        <td>LR on 7 features matches COMPAS's 137-feature product</td>
+        <td class="n">66.6%</td></tr>
+    <tr class="base"><td>COMPAS commercial tool</td><td>137-item proprietary questionnaire</td><td class="n">65.4%</td></tr>
+    <tr class="base"><td>Untrained humans (Dressel &amp; Farid)</td><td>Mechanical Turk workers</td><td class="n">62.8%</td></tr>
+  </table>
+</div>
+
+<h2>2 &nbsp;How the test is implemented</h2>
+
+<div class="card">
+  <table>
+    <tr><th>Step</th><th>Detail</th></tr>
+    <tr><td>Filter</td><td>ProPublica's published filter &rarr; 6,172 rows</td></tr>
+    <tr><td>Split</td><td>Stratified 70/30, <code>random_state=0</code> &rarr; 4,320 / 1,852</td></tr>
+    <tr><td>Train</td><td>First <b>500</b> training rows (what the LLM method can afford)</td></tr>
+    <tr><td>Test</td><td>All <b>1,852</b> rows &mdash; identical for every model</td></tr>
+    <tr><td>Baselines</td><td>Fitted twice: on all 4,320 and on the same 500</td></tr>
+    <tr><td>Encoding</td><td>sklearn: one-hot &rarr; 12 cols &nbsp;&middot;&nbsp; PolicyInduction: <code>column: value</code> text</td></tr>
+  </table>
+</div>
+
+<p class="muted">Both methods receive identical inputs, so any difference is
+  attributable to the method rather than to preprocessing. The 500-row baseline
+  rows are the valid head-to-head comparison.</p>
+
+<h3>Run configuration</h3>
+<div class="card scroll">
+  <table>
+    <tr><th>Generation model</th><td>gemini-3.5-flash</td>
+        <th>Scoring model</th><td>gemini-2.5-flash-lite</td></tr>
+    <tr><th>max_policies</th><td class="n">20</td>
+        <th>samples_per_batch</th><td class="n">20</td></tr>
+    <tr><th>max_gen_batches</th><td class="n">7</td>
+        <th>policy_batch_size</th><td class="n">10</td></tr>
+    <tr><th>beta</th><td class="n">0.5</td>
+        <th>penalty</th><td>L1</td></tr>
+    <tr><th>Decision threshold</th><td class="n">0.51</td>
+        <th>LLM calls</th><td class="n">~4,700</td></tr>
+  </table>
+</div>
+
+<h2>3 &nbsp;Results</h2>
+
+<p class="muted">All models evaluated on the same 1,852-row test set.</p>
+
+<div class="card scroll">
+  <table>
+    <tr><th>Model</th><th>Train rows</th><th>Accuracy</th><th>F1</th>
+        <th>Precision</th><th>Recall</th><th>ROC-AUC</th></tr>
+    <tr class="base"><td>logistic_regression</td><td class="n">4,320</td><td class="n">0.6830</td><td class="n">0.6268</td><td class="n">0.6753</td><td class="n">0.5848</td><td class="n">0.7339</td></tr>
+    <tr class="base"><td>gradient_boosting</td><td class="n">4,320</td><td class="n">0.6809</td><td class="n">0.6363</td><td class="n">0.6611</td><td class="n">0.6133</td><td class="n">0.7401</td></tr>
+    <tr class="base"><td>random_forest</td><td class="n">4,320</td><td class="n">0.6409</td><td class="n">0.5887</td><td class="n">0.6150</td><td class="n">0.5647</td><td class="n">0.6798</td></tr>
+    <tr><td>logistic_regression</td><td class="n">500</td><td class="n">0.6733</td><td class="n">0.5619</td><td class="n">0.7212</td><td class="n">0.4603</td><td class="n">0.7274</td></tr>
+    <tr class="hi"><td>PolicyInduction</td><td class="n">500</td><td class="n">0.6641</td><td class="n">0.5940</td><td class="n">0.6604</td><td class="n">0.5397</td><td class="n">0.7156</td></tr>
+    <tr><td>gradient_boosting</td><td class="n">500</td><td class="n">0.6544</td><td class="n">0.5784</td><td class="n">0.6504</td><td class="n">0.5208</td><td class="n">0.7043</td></tr>
+    <tr><td>random_forest</td><td class="n">500</td><td class="n">0.6339</td><td class="n">0.5789</td><td class="n">0.6076</td><td class="n">0.5528</td><td class="n">0.6646</td></tr>
+    <tr class="base"><td>majority class (all NO)</td><td class="n">&mdash;</td><td class="n">0.5448</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td></tr>
+  </table>
+</div>
+
+<h3>Induced policies <span class="muted" style="font-weight:400">(10 of 15 given non-zero weight)</span></h3>
+
+<div class="pol"><span class="w">+1.0926</span> &nbsp;Defendants with an extensive history of adult prior offenses (6 or more) should generally be classified as YES, though exceptions may occur for individuals with no juvenile history, such as mature defendants or certain young adults aged 25 to 30.</div>
+<div class="pol"><span class="w">+0.9313</span> &nbsp;Younger defendants (under 25) with 2 or more prior offenses should be classified as YES, regardless of whether their current charge is a felony or a misdemeanor.</div>
+<div class="pol"><span class="w">+0.7271</span> &nbsp;Younger defendants (under 25) facing a felony charge who have no adult prior offenses and whose only juvenile record consists of 'other' offenses should be classified as NO.</div>
+<div class="pol"><span class="w">+0.5151</span> &nbsp;Younger defendants (under 25) with juvenile convictions or multiple adult prior offenses who face a felony charge should be classified as YES, whereas those with only 1 adult prior and no juvenile history may be classified as NO.</div>
+<div class="pol"><span class="w">&minus;0.4788</span> &nbsp;Female defendants of any age with 1 or fewer prior offenses and no juvenile history should be classified as NO, especially if facing a misdemeanor charge.</div>
+<div class="pol"><span class="w">+0.2840</span> &nbsp;Younger defendants (under 25) with no adult prior offenses and no juvenile record should be classified as NO, regardless of whether their current charge is a felony or a misdemeanor, unless they are under 22 and facing a felony charge.</div>
+<div class="pol"><span class="w">+0.2804</span> &nbsp;Defendants with any history of juvenile felony or misdemeanor convictions who also have adult prior offenses should be classified as YES.</div>
+<div class="pol"><span class="w">+0.1665</span> &nbsp;Male defendants under 35 with 2 or more prior offenses or any juvenile history should generally be classified as YES, regardless of whether their current charge is a felony or misdemeanor.</div>
+<div class="pol"><span class="w">+0.1329</span> &nbsp;Young adult female defendants (under 35) with a current felony charge or 2 or more prior offenses should be classified as YES.</div>
+<div class="pol"><span class="w">+0.1032</span> &nbsp;Male defendants aged 25 to 45 with no juvenile history and 2 or fewer prior offenses are generally classified as NO.</div>
+
+<footer>
+  Single run &middot; policy generation at <code>temperature=1.0</code>, so runs vary.
+  &nbsp;|&nbsp; Data: <a href="https://github.com/propublica/compas-analysis">propublica/compas-analysis</a>
+  &nbsp;|&nbsp; Library commit <code>e1cf0ed</code>
+</footer>
+
+</div>
+</body>
+</html>

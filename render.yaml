@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: thl-compas-dashboard
+    runtime: static
+    staticPublishPath: ./dashboard
+    pullRequestPreviewsEnabled: false
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
