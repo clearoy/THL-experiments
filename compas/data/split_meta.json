@@ -1,0 +1,24 @@
+{
+  "source_url": "https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores-two-years.csv",
+  "filter": "ProPublica published filter",
+  "rows_after_filter": 6172,
+  "rows_after_dropna": 6172,
+  "features": [
+    "sex",
+    "age",
+    "age_cat",
+    "juv_fel_count",
+    "juv_misd_count",
+    "juv_other_count",
+    "priors_count",
+    "c_charge_degree"
+  ],
+  "include_race": false,
+  "target": "two_year_recid",
+  "test_size": 0.3,
+  "seed": 0,
+  "n_train": 4320,
+  "n_test": 1852,
+  "positive_rate_train": 0.4550925925925926,
+  "positive_rate_test": 0.45518358531317493
+}
