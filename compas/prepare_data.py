@@ -74,6 +74,36 @@ LEAKAGE = [
 ]
 PII = ["name", "first", "last", "dob"]
 
+# Raw COMPAS column names are cryptic abbreviations ("juv_fel_count",
+# "c_charge_degree: F"). PolicyInduction renders each row as `column: value`
+# text, so the column name IS the semantic signal the LLM reasons from -- an
+# abbreviation forces it to guess.
+#
+# This renaming is a deterministic, lossless lookup: no LLM, no added variance,
+# fully reproducible. It is also neutral for the sklearn baselines, since
+# one-hot encoding produces identical features whether a category is spelled
+# "F" or "Felony". So it removes an LLM-only handicap without changing what
+# the baselines see.
+COLUMN_RENAMES = {
+    "age": "age_years",
+    "age_cat": "age_group",
+    "juv_fel_count": "juvenile_felony_convictions",
+    "juv_misd_count": "juvenile_misdemeanor_convictions",
+    "juv_other_count": "juvenile_other_offenses",
+    "priors_count": "prior_offense_count",
+    "c_charge_degree": "current_charge_severity",
+    "c_charge_desc": "current_charge_description",
+}
+
+VALUE_RENAMES = {
+    "current_charge_severity": {"F": "Felony", "M": "Misdemeanor"},
+    "age_group": {
+        "Less than 25": "under 25",
+        "25 - 45": "25 to 45",
+        "Greater than 45": "over 45",
+    },
+}
+
 
 def load_raw() -> pd.DataFrame:
     """Read the raw CSV, downloading it on first run."""
@@ -109,7 +139,9 @@ def propublica_filter(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def build(include_race: bool, test_size: float, seed: int) -> None:
+def build(
+    include_race: bool, test_size: float, seed: int, readable_names: bool
+) -> None:
     df = propublica_filter(load_raw())
 
     features = BASE_FEATURES + (["race"] if include_race else [])
@@ -123,6 +155,16 @@ def build(include_race: bool, test_size: float, seed: int) -> None:
         raise SystemExit(f"Refusing to build: leakage/PII in features {banned & set(features)}")
 
     data = df[features + [TARGET]].dropna().reset_index(drop=True)
+
+    if readable_names:
+        data = data.rename(columns=COLUMN_RENAMES)
+        features = [COLUMN_RENAMES.get(c, c) for c in features]
+        for col, mapping in VALUE_RENAMES.items():
+            if col in data.columns:
+                # .replace, not .map: leaves any unlisted value untouched
+                # rather than turning it into NaN.
+                data[col] = data[col].replace(mapping)
+
     data["label"] = data[TARGET].map({1: "YES", 0: "NO"})
 
     train, test = train_test_split(
@@ -144,6 +186,7 @@ def build(include_race: bool, test_size: float, seed: int) -> None:
         "rows_after_dropna": int(data.shape[0]),
         "features": features,
         "include_race": include_race,
+        "readable_names": readable_names,
         "target": TARGET,
         "test_size": test_size,
         "seed": seed,
@@ -169,8 +212,14 @@ def main() -> None:
     )
     p.add_argument("--test-size", type=float, default=0.3)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument(
+        "--raw-names",
+        action="store_true",
+        help="Keep the raw COMPAS column names and codes instead of the "
+        "readable ones (useful for reproducing published setups verbatim).",
+    )
     args = p.parse_args()
-    build(args.include_race, args.test_size, args.seed)
+    build(args.include_race, args.test_size, args.seed, not args.raw_names)
 
 
 if __name__ == "__main__":

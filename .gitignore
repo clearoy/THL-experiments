@@ -1,0 +1,27 @@
+# Everything here is regenerable. Tracking it means every re-run produces a
+# diff on binary files and the repo grows with each experiment.
+#
+# What stays tracked: scripts, READMEs, and data/split_meta.json (which records
+# the exact filter/split/feature choices, so a split can be reproduced without
+# shipping the data itself).
+
+# Raw + derived datasets — downloaded by prepare_data.py, rebuilt by it
+*/data/*.csv
+*/data/*.parquet
+
+# Metrics and per-row predictions — rebuilt by baselines.py / run_*.py
+*/results/
+
+# Per-run model artifacts (policies.parquet, lr.joblib, report.md, checkpoints)
+*/run*/
+*/smoke/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

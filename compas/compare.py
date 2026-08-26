@@ -46,10 +46,15 @@ def main() -> None:
             label = f"{name} ({regime})"
             lines.append(f"| {label} | {n_train} |{fmt(m)}")
 
-    pi_path = RESULTS_DIR / "policy_induction.json"
-    if pi_path.exists():
-        pi = json.loads(pi_path.read_text())
-        lines.append(f"| **PolicyInduction** | {pi['n_train']} |{fmt(pi)}")
+    pi_paths = sorted(RESULTS_DIR.glob("policy_induction_*.json"))
+    if pi_paths:
+        for p in pi_paths:
+            pi = json.loads(p.read_text())
+            run = p.stem.replace("policy_induction_", "")
+            label = f"**PolicyInduction** ({run})"
+            if pi.get("n_scored", 0) != pi.get("n_test", 0):
+                label += f" [{pi['n_scored']}/{pi['n_test']} scored]"
+            lines.append(f"| {label} | {pi['n_train']} |{fmt(pi)}")
     else:
         lines.append("| *PolicyInduction* | -- | *not run yet* | | | | |")
 

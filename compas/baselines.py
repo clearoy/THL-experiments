@@ -109,25 +109,41 @@ def run(n_train: int, n_test: int, seed: int) -> None:
         "regimes": {},
     }
 
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
     for regime, tr in regimes.items():
         X_tr, y_tr = tr[features], tr[TARGET]
         block: Dict[str, Any] = {"n_train": int(len(tr))}
         print(f"\n=== {regime}  (n_train={len(tr)}, n_test={len(test_eval)}) ===")
+
+        # Per-row detail: one row per test sample, one prob/pred pair per model.
+        detail = pd.DataFrame(
+            {"sample_index": test_eval.index, "y_true": y_test.to_numpy()}
+        ).set_index("sample_index")
+
         for name, model in make_models(seed).items():
             pipe = build_pipeline(model, X_tr).fit(X_tr, y_tr)
-            y_pred = pipe.predict(X_test)
             y_prob = pipe.predict_proba(X_test)[:, 1]
+            # Predict from the probability at an explicit 0.5 rather than via
+            # .predict(), so the threshold is recorded and can be swept later.
+            y_pred = (y_prob >= 0.5).astype(int)
             m = score(y_test, y_pred, y_prob)
+            m["threshold"] = 0.5
             block[name] = m
+            detail[f"{name}_prob"] = y_prob
+            detail[f"{name}_pred"] = y_pred
             print(
                 f"  {name:22s} acc={m['accuracy']:.4f}  f1={m['f1']:.4f}  "
                 f"auc={m['roc_auc']:.4f}  p={m['precision']:.4f}  r={m['recall']:.4f}"
             )
+
+        detail_path = RESULTS_DIR / f"predictions_baselines_{regime}.csv"
+        detail.to_csv(detail_path)
+        print(f"  -> per-row predictions: {detail_path.name}")
         results["regimes"][regime] = block
 
     print(f"\n  {'majority class (all NO)':22s} acc={results['majority_class_accuracy']:.4f}")
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out = RESULTS_DIR / "baselines.json"
     out.write_text(json.dumps(results, indent=2))
     print(f"\nwrote {out}")
@@ -141,7 +157,13 @@ def main() -> None:
         default=500,
         help="Rows for the subsample regime, matching the PolicyInduction run.",
     )
-    p.add_argument("--n-test", type=int, default=1000, help="0 = full test set.")
+    p.add_argument(
+        "--n-test",
+        type=int,
+        default=0,
+        help="Test rows to evaluate on; 0 (default) = the full test set. Must "
+        "match what run_policy_induction.py used or the comparison is invalid.",
+    )
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
     run(args.n_train, args.n_test, args.seed)

@@ -19,9 +19,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
@@ -30,6 +32,7 @@ from sklearn.metrics import (
     fbeta_score,
     precision_score,
     recall_score,
+    roc_auc_score,
 )
 
 # think_reason_learn is not pip-installed in this venv; it resolves only when
@@ -52,12 +55,34 @@ TARGET = "two_year_recid"
 TASK_DESCRIPTION = (
     "Predict whether a criminal defendant will be arrested for another offense "
     "within two years of their COMPAS screening date. Each sample describes one "
-    "defendant from Broward County, Florida, using their age, sex, current "
-    "charge degree (F = felony, M = misdemeanour), number of prior offenses, and "
-    "counts of juvenile felony, misdemeanour, and other offenses. Answer YES if "
-    "the defendant is likely to reoffend within two years, NO otherwise. This is "
-    "a research benchmark built from a public dataset released by ProPublica."
+    "defendant from Broward County, Florida, with these fields:\n"
+    "- sex, age_years, age_group: demographics at screening time.\n"
+    "- prior_offense_count: how many prior offenses are on their adult record.\n"
+    "- juvenile_felony_convictions, juvenile_misdemeanor_convictions, "
+    "juvenile_other_offenses: offenses committed as a minor. These are zero for "
+    "most defendants; a non-zero value is uncommon and notable.\n"
+    "- current_charge_severity: whether the charge that brought them in is a "
+    "Felony (more serious) or a Misdemeanor (less serious).\n"
+    "Answer YES if the defendant is likely to be arrested again within two "
+    "years, NO otherwise. This is a research benchmark built from a public "
+    "dataset released by ProPublica."
 )
+
+
+def thl_commit() -> str:
+    """The library commit this result was produced with.
+
+    The library and these experiments live in separate repos, so a result
+    without this stamp cannot be tied back to the code that produced it.
+    """
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "--short", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return "unknown"
 
 
 def load_split(n_train: int, n_test: int):
@@ -103,10 +128,16 @@ async def main_async(args: argparse.Namespace) -> None:
     pi = PolicyInduction(
         gen_llmc=[GoogleChoice(model=args.gen_model)],
         predict_llmc=[GoogleChoice(model=args.predict_model)],
-        # beta=1.0, not the 0.5 default: COMPAS is ~45% positive and the
-        # rule-list literature reports accuracy/F1, so precision and recall
-        # should weigh equally. (VCBench used 0.5 because it is ~9% positive.)
-        config=WeightTrainerConfig(beta=1.0, penalty="l1"),
+        # beta=0.5, not 1.0. F-beta ignores true negatives entirely, which is
+        # the wrong family for a ~45% positive dataset where correctly
+        # identifying non-recidivists matters as much as identifying
+        # recidivists. F1 in particular is maximised by over-predicting the
+        # positive class (trivial always-YES scores F1=0.625 here), which drove
+        # an earlier run to predict YES on 89% of samples. Measured offline on
+        # the saved policy scores, beta=0.5 reproduces accuracy-optimal and
+        # balanced-accuracy-optimal threshold selection exactly, so it buys the
+        # correct operating point without needing to modify _fit_weights.
+        config=WeightTrainerConfig(beta=0.5, penalty="l1"),
         max_policy_length=args.max_policies,
         class_ratio=(1.0, 1.0),
         max_samples_as_context=args.samples_per_batch,
@@ -144,12 +175,25 @@ async def main_async(args: argparse.Namespace) -> None:
     pi.save()
     print(f"\nModel saved to {outdir}")
 
-    rows = []
+    # Keep the policy vector, not just the label: it is what the decision
+    # threshold is applied to, so discarding it makes threshold analysis and
+    # ROC-AUC impossible after the fact.
+    rows, vectors = [], []
     async for sample_index, vector, prediction, token_counter in pi.predict(X_test):
         rows.append({"sample_index": sample_index, "prediction": prediction})
+        vectors.append(vector)
         last_counter = token_counter
 
-    pred_df = pd.DataFrame(rows).set_index("sample_index").sort_index()
+    V = np.array(vectors, dtype=float)
+    pred_df = pd.DataFrame(rows)
+    # Probability behind each decision, recovered from the fitted LR.
+    pred_df["probability"] = pi.lr.predict_proba(V)[:, 1]
+    pred_df["threshold"] = pi.threshold
+    # One column per policy (its 1/0 answer for this sample). Attached before
+    # the sort so the vectors stay row-aligned with their sample_index.
+    for j, name in enumerate(pi._feature_order_):
+        pred_df[f"policy_{name}"] = V[:, j]
+    pred_df = pred_df.set_index("sample_index").sort_index()
     if len(pred_df) < len(X_test):
         # predict() skips samples where no policy answer could be obtained.
         print(
@@ -159,8 +203,32 @@ async def main_async(args: argparse.Namespace) -> None:
 
     y_true = test_df.loc[pred_df.index, TARGET].tolist()
     y_pred = [1 if p == "YES" else 0 for p in pred_df["prediction"]]
+    prob = pred_df["probability"].to_numpy()
     metrics = score(y_true, y_pred)
+    metrics["threshold"] = float(pi.threshold)
+    # Threshold-independent, so this is the metric directly comparable to the
+    # sklearn baselines regardless of where either model's cut point sits.
+    metrics["roc_auc"] = float(roc_auc_score(y_true, prob))
+    # Full sweep so the operating point can be re-chosen without re-running.
+    # NOTE: picking a threshold off this table means picking it on test data,
+    # which is optimistically biased. Use a validation split for any reported
+    # number; this is a diagnostic.
+    metrics["threshold_sweep"] = [
+        {"threshold": round(float(t), 2), **score(y_true, (prob >= t).astype(int))}
+        for t in np.arange(0.05, 0.96, 0.05)
+    ]
     metrics["n_scored"] = len(pred_df)
+    metrics["thl_commit"] = thl_commit()
+    metrics["config"] = {
+        "gen_model": args.gen_model,
+        "predict_model": args.predict_model,
+        "max_policies": args.max_policies,
+        "samples_per_batch": args.samples_per_batch,
+        "max_gen_batches": args.max_gen_batches,
+        "policy_batch_size": args.policy_batch_size,
+        "beta": pi.config.beta,
+        "penalty": pi.config.penalty,
+    }
     metrics["n_test"] = len(X_test)
     metrics["n_train"] = len(X_train)
     metrics["validation_result"] = pi.validation_result
@@ -169,24 +237,36 @@ async def main_async(args: argparse.Namespace) -> None:
     # capture it here so cost is recoverable after the fact.
     metrics["predict_token_usage"] = last_counter.to_dict()
 
+    # Keyed by --outdir so repeated runs accumulate side by side instead of
+    # overwriting each other. Repetition matters here: identical configs have
+    # been seen to differ by ~0.08 precision on LLM sampling noise alone.
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / "policy_induction.json").write_text(json.dumps(metrics, indent=2))
-    pred_df.to_csv(RESULTS_DIR / "policy_induction_predictions.csv")
+    metrics_path = RESULTS_DIR / f"policy_induction_{args.outdir}.json"
+    metrics_path.write_text(json.dumps(metrics, indent=2))
+    pred_df.to_csv(RESULTS_DIR / f"policy_induction_{args.outdir}_predictions.csv")
 
     print("\n=== PolicyInduction on COMPAS ===")
-    for k in ("accuracy", "f1", "f0.5", "precision", "recall"):
+    for k in ("accuracy", "f1", "f0.5", "precision", "recall", "roc_auc"):
         print(f"  {k:12s} {metrics[k]:.4f}")
-    print(f"\nwrote {RESULTS_DIR}/policy_induction.json")
+    print(f"  {'threshold':12s} {metrics['threshold']:.4f}")
+    print(f"\nwrote {metrics_path}")
+    print(f"wrote {RESULTS_DIR}/policy_induction_{args.outdir}_predictions.csv")
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--n-train", type=int, default=500)
-    p.add_argument("--n-test", type=int, default=1000, help="0 = full test set.")
+    p.add_argument(
+        "--n-test",
+        type=int,
+        default=0,
+        help="Test rows to evaluate on; 0 (default) = the full test set. Must "
+        "match what baselines.py used or the comparison is invalid.",
+    )
     p.add_argument("--gen-model", default="gemini-3.5-flash")
     p.add_argument("--predict-model", default="gemini-2.5-flash-lite")
     p.add_argument("--max-policies", type=int, default=20)
-    p.add_argument("--samples-per-batch", type=int, default=20)
+    p.add_argument("--samples-per-batch", type=int, default=10)
     p.add_argument("--max-gen-batches", type=int, default=7)
     p.add_argument("--policy-batch-size", type=int, default=10)
     p.add_argument("--concurrency", type=int, default=3)
