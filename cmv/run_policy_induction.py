@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +36,20 @@ RESULTS_DIR = HERE / "results"
 REPO_ROOT = HERE.parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+# think_reason_learn's Settings uses env_file=".env", which pydantic-settings
+# resolves relative to the CWD -- so running from anywhere but the library root
+# silently yields empty keys and a misleading "GOOGLE_API_KEY not set" error
+# (the setting is actually GOOGLE_AI_API_KEY). Export the library repo's .env
+# into the environment before importing, so this works from any directory.
+_ENV = REPO_ROOT / ".env"
+if _ENV.exists():
+    for _line in _ENV.read_text().splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _k, _v = _line.split("=", 1)
+        os.environ.setdefault(_k.strip(), _v.strip().strip("'\""))
 
 from think_reason_learn.core.llms import GoogleChoice  # noqa: E402
 from think_reason_learn.policy_induction import (  # noqa: E402
