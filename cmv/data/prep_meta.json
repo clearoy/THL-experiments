@@ -1,0 +1,9 @@
+{
+  "source": "Tan et al. 2016, WWW. cmv.tar.bz2 pair_task (v1.0, Jan 2016)",
+  "conditions": [
+    "root_reply",
+    "full_path",
+    "root_truncated"
+  ],
+  "dropped_deleted": true
+}

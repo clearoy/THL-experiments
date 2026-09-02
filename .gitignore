@@ -5,9 +5,12 @@
 # the exact filter/split/feature choices, so a split can be reproduced without
 # shipping the data itself).
 
-# Raw + derived datasets — downloaded by prepare_data.py, rebuilt by it
-*/data/*.csv
-*/data/*.parquet
+# Raw + derived datasets — downloaded by prepare_data.py, rebuilt by it.
+# Ignore the whole data dir and re-admit only the small *_meta.json files, so a
+# new dataset's format (.tar.bz2, .jsonlist.bz2, .sqlite, ...) can never slip
+# through by not matching an extension listed here.
+*/data/*
+!*/data/*meta*.json
 
 # Metrics and per-row predictions — rebuilt by baselines.py / run_*.py
 */results/
