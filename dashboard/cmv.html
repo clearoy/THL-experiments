@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolicyInduction on ChangeMyView</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+<nav>
+  <a class="home" href="index.html">THL benchmarks</a>
+  <a href="compas.html">COMPAS</a>
+  <a href="cmv.html" aria-current="page">ChangeMyView</a>
+</nav>
+
+<header>
+  <h1>PolicyInduction on ChangeMyView</h1>
+  <div class="sub">LLM-induced natural-language policies vs. embeddings and published features
+    &middot; argument persuasion &middot; think-reason-learn <code>e1cf0ed</code></div>
+</header>
+
+<h2>1 &nbsp;Dataset</h2>
+
+<div class="grid">
+  <div class="stat"><b>3,456</b><span>training pairs</span></div>
+  <div class="stat"><b>807</b><span>heldout pairs (all methods)</span></div>
+  <div class="stat"><b>50.0%</b><span>positive, by construction</span></div>
+  <div class="stat"><b>&plusmn;1.8pp</b><span>standard error at n=807</span></div>
+</div>
+
+<p class="muted" style="margin-top:14px">Tan et&nbsp;al. 2016, the pair task from
+  the Cornell ChangeMyView corpus v1.0. On /r/ChangeMyView a user posts a view
+  and invites others to argue against it; if a reply changes their mind, the
+  poster awards it a <b>delta</b>. Each example pairs two replies to the
+  <em>same</em> post &mdash; one that earned a delta, one that did not &mdash;
+  selected as the two most lexically similar root replies. The task is to pick
+  the winner.</p>
+
+<p class="muted">The split is temporal, not random: training covers
+  2013-01-01&ndash;2015-05-07 and heldout 2015-05-08&ndash;2015-09-01. No post
+  appears in both.</p>
+
+<h3>Why the pairing matters</h3>
+<p>Both replies answer the same person, the same stated view, the same topic. The
+  subject matter therefore cannot separate them, and neither can anything that
+  depends on the post alone. Only <em>how</em> each reply argues is left.</p>
+
+<h3>Text conditions</h3>
+<div class="card scroll">
+  <table>
+    <tr><th>Condition</th><th>Argument text</th><th>Word-count baseline</th></tr>
+    <tr class="hi"><td><code>root_reply</code></td><td>The root comment only &mdash; primary condition</td><td class="n">0.5967</td></tr>
+    <tr><td><code>full_path</code></td><td>Every comment by that author in the branch</td><td class="n">0.6543</td></tr>
+    <tr><td><code>root_truncated</code></td><td>Both roots cut to the shorter one's word count</td><td class="n">0.5000</td></tr>
+  </table>
+</div>
+
+<p class="muted">Winning replies are longer &mdash; 190 median words against 155
+  &mdash; so &ldquo;pick the longer one&rdquo; alone scores 0.5967.
+  <code>root_truncated</code> is the control for that: with both sides at
+  identical word counts a length guesser is forced to exactly 0.5000, and the
+  preparation scripts abort if it is not.</p>
+
+<h3>How PolicyInduction consumes a pair</h3>
+<p>One row per pair, carrying both replies. Which reply lands in slot A is
+  randomised 50/50, so position carries no information, and the label names the
+  winner.</p>
+
+<pre>op_title  : CMV: guys and girls can NEVER be 'just friends'     Policies:
+op_view   : I am 16 and don't have much experience with how      id=0: Whether argument_A validates
+            it is in the 'adult world'. But I don't think a            the opponent's concern before
+            100% platonic relationship can exist ... [300w]            introducing a counter-example.
+argument_A: This sort of logic seems a bit backwards to me.  +   id=1: ...
+            To say the possibility of a relationship
+            precludes a true friendship doesn't make sense ...   &rarr; one YES/NO answer per policy id
+argument_B: I strongly disagree, based on the fact that I
+            have several female friends with whom I have ...
+y         : YES        &larr; means argument_A won the delta</pre>
+
+<div class="flow">
+  <span class="step">generate comparative policies</span><span class="arrow">&rarr;</span>
+  <span class="step">score each policy &times; pair</span><span class="arrow">&rarr;</span>
+  <span class="step">binary matrix</span><span class="arrow">&rarr;</span>
+  <span class="step">L1 logistic regression</span><span class="arrow">&rarr;</span>
+  <span class="step">A or B</span>
+</div>
+<p class="muted">Identical machinery to the COMPAS run. The only structural
+  difference is that a policy here compares two texts rather than describing one,
+  and the decision cut is fixed at 0.50 because swapping the replies must flip
+  the answer.</p>
+
+<h3>Published results on this task</h3>
+<div class="card scroll">
+  <table>
+    <tr><th>Paper</th><th>Contribution</th><th>Accuracy</th></tr>
+    <tr><td><a href="https://arxiv.org/abs/1602.01103">Tan et&nbsp;al. 2016</a><br><span class="pos">WWW &middot; released the corpus</span></td>
+        <td>Interplay, style, bag-of-words and POS features; paired logistic regression on all 3,456 training pairs</td>
+        <td class="n">65.1%</td></tr>
+    <tr class="base"><td>#words baseline (their paper)</td>
+        <td>Longer reply wins</td><td class="n">59.6%</td></tr>
+  </table>
+</div>
+<p class="muted">Their evaluation set is the same 807 heldout pairs used here,
+  and this repo's word-count baseline reproduces their number to
+  0.5967 / 0.6543 / 0.5000 across the three conditions &mdash; the check that the
+  data preparation is correct. Their classifier compares the two replies as a
+  pair and is fitted on all 3,456 training pairs, so it is a reference point
+  rather than a budget-matched competitor.</p>
+
+<h2>2 &nbsp;How the test is implemented</h2>
+
+<div class="card">
+  <table>
+    <tr><th>Step</th><th>Detail</th></tr>
+    <tr><td>Formulation</td><td>One row per pair; label <code>YES</code> means <code>argument_A</code> won</td></tr>
+    <tr><td>Slot assignment</td><td>Randomised exactly 50/50, so position carries no signal</td></tr>
+    <tr><td>Train</td><td><b>500</b> pairs, stratified, nested draw &mdash; the LLM budget</td></tr>
+    <tr><td>Test</td><td>All <b>807</b> heldout pairs &mdash; identical for every method</td></tr>
+    <tr><td>Decision</td><td>Probability &gt; 0.50. Not the fitted F-beta threshold: swapping the two replies must flip the answer, and only a 0.50 cut respects that</td></tr>
+    <tr><td>Positional control</td><td>Every pair scored in <b>both orders</b> and averaged; pairs where both orders name the same slot score 0.5</td></tr>
+    <tr><td>Metric</td><td>Pairwise accuracy, ties 0.5</td></tr>
+  </table>
+</div>
+
+<p class="muted">The two replies are never shown for a holistic side-by-side
+  judgement without the swap control. Scored once, the small model named slot A
+  on 73% of pairs; averaging both orders removes that.</p>
+
+<h3>Run configuration</h3>
+<div class="card scroll">
+  <table>
+    <tr><th>Generation model</th><td>gemini-3.5-flash</td>
+        <th>Scoring model</th><td>gemini-3.5-flash</td></tr>
+    <tr><th>max_policies</th><td class="n">15</td>
+        <th>samples_per_batch</th><td class="n">20</td></tr>
+    <tr><th>max_gen_batches</th><td class="n">10</td>
+        <th>policy_batch_size</th><td class="n">15</td></tr>
+    <tr><th>beta</th><td class="n">0.5</td>
+        <th>penalty</th><td>L1</td></tr>
+    <tr><th>op_view truncation</th><td class="n">300 words</td>
+        <th>LLM calls</th><td class="n">~2,125</td></tr>
+  </table>
+</div>
+<p class="muted">Every prompt is the library default except the task description,
+  from which <code>set_task()</code> derives the policy-generation template.
+  <code>beta</code> selects the regularisation strength only; it cannot move the
+  reported accuracy, which uses the fixed 0.50 cut.</p>
+
+<h2>3 &nbsp;Results</h2>
+
+<p class="muted">All methods on the same 807 heldout pairs, <code>root_reply</code>,
+  seed 0. Bars span 0.45&ndash;0.70.</p>
+
+<div class="card scroll">
+  <table>
+    <tr><th>Method</th><th>Train pairs</th><th>Scorer</th><th>Accuracy</th><th></th></tr>
+    <tr class="base"><td>Tan et&nbsp;al. 2016</td><td class="n">3,456</td><td>&mdash;</td>
+        <td class="n">0.6510</td><td class="bar-cell"><span class="bar"><i style="width:80.4%"></i></span></td></tr>
+    <tr><td>embeddings + cos + length</td><td class="n">3,456</td><td>&mdash;</td>
+        <td class="n">0.6481</td><td class="bar-cell"><span class="bar"><i style="width:79.2%"></i></span></td></tr>
+    <tr><td>embeddings only</td><td class="n">3,456</td><td>&mdash;</td>
+        <td class="n">0.6394</td><td class="bar-cell"><span class="bar"><i style="width:75.8%"></i></span></td></tr>
+    <tr><td>embeddings + cos + length</td><td class="n">500</td><td>&mdash;</td>
+        <td class="n">0.6344</td><td class="bar-cell"><span class="bar"><i style="width:73.8%"></i></span></td></tr>
+    <tr class="hi"><td>PolicyInduction, 15 rules</td><td class="n">500</td><td>gemini-3.5-flash</td>
+        <td class="n">0.6241</td><td class="bar-cell"><span class="bar"><i style="width:69.6%"></i></span></td></tr>
+    <tr class="base"><td>word count</td><td class="n">&mdash;</td><td>&mdash;</td>
+        <td class="n">0.5967</td><td class="bar-cell"><span class="bar"><i style="width:58.7%"></i></span></td></tr>
+    <tr class="base"><td>BoW, argument only</td><td class="n">150</td><td>&mdash;</td>
+        <td class="n">0.5849</td><td class="bar-cell"><span class="bar"><i style="width:54.0%"></i></span></td></tr>
+    <tr><td>control &mdash; one hand-written prompt</td><td class="n">100</td><td>gemini-2.5-flash-lite</td>
+        <td class="n">0.5509</td><td class="bar-cell"><span class="bar"><i style="width:40.4%"></i></span></td></tr>
+    <tr><td>PolicyInduction, 15 rules</td><td class="n">500</td><td>gemini-2.5-flash-lite</td>
+        <td class="n">0.4963</td><td class="bar-cell"><span class="bar"><i style="width:18.5%"></i></span></td></tr>
+  </table>
+</div>
+
+<h3>Induced policies <span class="muted" style="font-weight:400">(all 15 given non-zero weight)</span></h3>
+
+<div class="pol"><span class="w">+4.8446</span> &nbsp;To counter a nihilistic or defeatist philosophical stance, directly challenge the underlying premise that permanence, scale, or external validation is a prerequisite for value, and reframe temporary, subjective experiences as inherently meaningful.</div>
+<div class="pol"><span class="w">&minus;4.6186</span> &nbsp;When challenging a deeply held moral or ideological stance, citing an authority figure from the opponent's own ideological camp who supports your counter-position is highly persuasive and disarms accusations of bias.</div>
+<div class="pol"><span class="w">&minus;3.9476</span> &nbsp;To make an unfamiliar emotional, psychological, or niche investment intuitive, draw a direct parallel to a universally accepted, mainstream form of consumption, such as emotional investment in fictional characters or standard hobbies.</div>
+<div class="pol"><span class="w">+2.3905</span> &nbsp;When an opponent already acknowledges the financial or mathematical drawbacks of their position, attempting to persuade them with further mathematical models is ineffective; instead, focus on concrete lifestyle, psychological, or practical quality-of-life factors they have overlooked.</div>
+<div class="pol"><span class="w">+1.6811</span> &nbsp;When defending a controversial policy or corporate standard, shifting the focus from user convenience to institutional constraints, regulatory requirements, or risk-management incentives is highly persuasive.</div>
+<div class="pol"><span class="w">&minus;1.3759</span> &nbsp;Arguments are significantly more persuasive when they maintain an analytical, calm, and objective tone, focusing on pragmatic outcomes and self-preservation rather than resorting to emotional appeals, moralizing, or personalizing accusations.</div>
+<div class="pol"><span class="w">&minus;1.3053</span> &nbsp;When countering a judgmental or moralizing stance, a highly effective technique is to reframe the opponent's own preferred behavior or lifestyle using the exact same critical vocabulary they used to attack others, exposing their underlying double standards.</div>
+<div class="pol"><span class="w">+1.2422</span> &nbsp;To explain or defend abstract systems, rules, or fictional settings, mapping them directly to highly recognizable, concrete historical, geopolitical, or real-world governmental realities makes their underlying logic immediately intuitive.</div>
+<div class="pol"><span class="w">+1.0621</span> &nbsp;When contesting a generalized claim or defending a specific technology, providing highly specific, domain-technical, and functional explanations, or a single prominent, tragic real-world case study, is far more effective than generic defenses or listing multiple abstract harms.</div>
+<div class="pol"><span class="w">+0.8773</span> &nbsp;An argument is significantly strengthened by introducing a precise, overlooked distinction between two concepts the opponent has conflated, or by establishing an objective, authoritative definition of a contested concept to show how your stance fits within it.</div>
+<div class="pol"><span class="w">+0.4631</span> &nbsp;To defeat a radical or harsh policy proposal, systematically trace the logical, real-world steps of its implementation to prove it would trigger counter-intuitive, highly undesirable consequences that actively defeat the proposer's objective.</div>
+<div class="pol"><span class="w">+0.3644</span> &nbsp;A reply is more likely to win if it explicitly validates the opponent's underlying concerns or logical difficulty before introducing a counter-example, a safe-zone compromise, or a different conceptual framing.</div>
+<div class="pol"><span class="w">&minus;0.1488</span> &nbsp;Criticized cultural behaviors, social norms, or personal preferences are more compellingly defended when reframed not as ignorance or moral failure, but as highly functional, rational adaptations developed under specific real-world, structural, or economic constraints.</div>
+<div class="pol"><span class="w">+0.0620</span> &nbsp;An argument challenging a strict moral, ethical, or legal stance is highly effective when it constructs a high-stakes, forced-choice hypothetical dilemma where the opponent's absolute rule leads to an inconsistent or unacceptable outcome.</div>
+<div class="pol"><span class="w">&minus;0.0309</span> &nbsp;An argument is more persuasive when it systematically addresses specific empirical claims, logical steps, or analogies underpinning an opponent's view, rather than merely contesting their overarching philosophy.</div>
+
+<footer>
+  Single run &middot; policy generation at <code>temperature=1.0</code>, so runs vary; use &ge;3 seeds before believing a gap.
+  &nbsp;|&nbsp; Data: <a href="https://chenhaot.com/pages/changemyview.html">Cornell ChangeMyView corpus v1.0</a> (via Wayback; the canonical URL is dead)
+  &nbsp;|&nbsp; Library commit <code>e1cf0ed</code>
+</footer>
+
+</div>
+</body>
+</html>
