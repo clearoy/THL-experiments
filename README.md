@@ -24,6 +24,7 @@ README, and results that are reproducible from the scripts alone.
 | Dataset | Task | Status |
 |---|---|---|
 | [`compas/`](compas/) | 2-year recidivism, 6,172 rows, 45.5% positive | PolicyInduction at parity with logistic regression |
+| [`cmv/`](cmv/) | ChangeMyView persuasion, 807 heldout pairs | PolicyInduction 0.6241 vs 0.5967 word count, level with an embedding baseline and with Tan et al. 2016. Result hinges on the scorer model |
 
 ## Setup
 

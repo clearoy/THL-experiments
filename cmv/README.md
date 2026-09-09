@@ -1,143 +1,150 @@
 # ChangeMyView persuasion benchmark
 
-PolicyInduction on the pair task from Tan et al. 2016 (WWW): given two
-argumentative replies to the same ChangeMyView post — one that earned a delta,
-one that did not — identify the winner.
+Pair task from Tan et al. 2016 (WWW). Two replies to the same post, one earned a
+delta, one did not. Pick the winner.
 
-## Data
+`prepare_data.py` → `data/units_{train,heldout}.parquet`, two rows per pair.
 
-`cmv.tar.bz2` → `pair_task/`, v1.0 (January 2016). **3,456 train / 807 heldout
-pairs**, both verified against the published counts.
+| Split | Period | Pairs | Rows |
+|---|---|---|---|
+| train | 2013-01-01 → 2015-05-07 | 3,456 | 6,912 |
+| heldout | 2015-05-08 → 2015-09-01 | 807 | 1,614 |
 
-⚠️ The canonical URL `https://chenhaot.com/data/cmv/cmv.tar.bz2` is **dead** —
-the site migrated to GitHub Pages and dropped its data directory (the paper page
-still links to it). `data/cmv.tar.bz2` here came from the
-[2022-12-26 Wayback snapshot](https://web.archive.org/web/20221226140424id_/https://chenhaot.com/data/cmv/cmv.tar.bz2).
-The README inside confirms v1.0, not the 11/2016 dump.
+All methods are evaluated on the same 807 heldout pairs. Accuracy is pairwise,
+ties count 0.5, SE ≈ 1.8pp.
 
-### Schema
+## Input
 
-One JSON object per line: `op_author`, `op_title`, `op_text`, `op_name`,
-`positive`, `negative`.
+One row per **pair**: the post plus both replies, labelled with the winner.
+Which reply lands in slot A is randomised 50/50, so position carries no
+information.
 
-**`positive`/`negative` are dicts, not lists** — the bundled README says "a list
-of replies", but they are `{ancestor, author, comments[]}`, where `comments` is
-the rooted path-unit as Reddit API objects. Text is `comments[i]["body"]`.
+| Column | Used for |
+|---|---|
+| `pair_id` | identifies the pair; one row per pair after pivoting |
+| `side` | `positive` / `negative` — which reply won, i.e. the target |
+| `label` / `delta` | `YES`/`NO` and `1`/`0`, same target restated |
+| `words_<condition>` | word-count baseline |
+| `arg_<condition>` | becomes `argument_A` and `argument_B` |
+| `op_title`, `op_text` | `op_text` cut to 300 words, renamed `op_view` |
 
-Only `body` is read. Comment metadata is excluded deliberately:
-`author_flair_text` carries the author's delta count (`"1∆"`), which would leak
-the label.
-
-**71% of positive and 82% of negative units are a single comment**, so
-`root_reply` and `full_path` differ on only ~25% of pairs.
-
-## Design
-
-**Fit pointwise, evaluate pairwise.** One row per path-unit (text = OP +
-argument, label = delta/no_delta). At evaluation, both members of a heldout pair
-are scored independently and the higher one is predicted.
-
-The two members are **never shown side by side** — that formulation carries
-~50pp of positional bias on this data and would swamp any real signal.
-
-### Three conditions
-
-| Condition | Text |
+| `<condition>` | Argument text |
 |---|---|
 | `root_reply` | root comment only — **primary** |
-| `full_path` | every comment in the path-unit |
-| `root_truncated` | both roots cut to the **shorter one's** word count |
+| `full_path` | all comments in the path-unit |
+| `root_truncated` | root cut to the shorter side's word count |
 
-`root_truncated` is the length control. With both sides at identical word
-counts, a word-count baseline is forced to exactly 50%. `prepare_data.py` and
-`baselines.py` both assert this and **abort** if it drifts — anything else means
-the truncation is broken and every downstream number is uninterpretable.
+PolicyInduction receives four fields — `op_title`, `op_view`, `argument_A`,
+`argument_B` — and a YES/NO label meaning "A won".
 
-## Baselines (free, no API calls)
+## Example row
 
-Pointwise fit → pairwise eval, same protocol as PolicyInduction.
+Heldout, `pair_id=196`, `side=positive`.
 
-| Condition | word count | BoW (arg only) | BoW (OP+arg) |
-|---|---|---|---|
-| `root_reply` | **0.5967** | 0.6146 | 0.6171 |
-| `full_path` | 0.6543 | 0.6481 | 0.6667 |
-| `root_truncated` | **0.5000** | 0.5874 | 0.5725 |
+```
+pair_id              : 196
+side                 : positive
+label / delta        : YES / 1
+op_title             : CMV: guys and girls can NEVER be 'just friends'
+op_text              : First Let me just say I am 16 and don't have much
+                       experience with how it is in the 'adult world'. But I
+                       don't think a 100% platonic relationship can exist
+                       between a straight male and a straight female. [...]
+arg_root_reply       : This sort of logic seems a bit backwards to me.  To me, a
+                       relationship is not possible without the people being
+                       friends first.  To say the possibility of a relationship
+                       precludes a true friendship doesn't make any sense to me,
+                       because there is no possibility of a relationship without
+                       the friendship.
 
-*(BoW fitted on all 6,912 train units. At `--n-train-units 300`, matching the
-LLM budget: 0.5849 / 0.6530 / 0.5725.)*
+                       To think about it from a different perspective, do you
+                       think that bi people are incapable of having a friendship?
+words_root_reply     : 71
+words_root_truncated : 71
+n_comments           : 1
+```
 
-`root_reply` word count lands on **0.5967**, matching the expected 59.6%.
-`root_truncated` word count is **exactly 0.5000**.
+Its partner row is `side=negative`, same `pair_id` and same `op_*`, with
+`words_root_reply=94`.
 
-BoW on `root_truncated` reaches 0.5874 with length held constant, so there is
-real lexical signal beyond length — that is the headroom the rules must beat.
+## Experiments
 
-### Targets
-
-| | Accuracy |
+| Name | Definition |
 |---|---|
-| Word count (`root_reply`) | 59.6% |
-| Tan et al. 2016 interplay features | 65.1% |
-| Labruna et al. 2026, best LLM | 64.53% |
+| **word count** | Longer reply wins. Nothing fitted. |
+| **BoW** | TF-IDF (1–2 grams) + logistic regression, fitted pointwise on `delta`, evaluated pairwise. |
+| **embeddings** | `gemini-embedding-001` (3072d) on each reply. Feature is the **difference** of the two vectors, optionally plus cos(post, reply) difference and log-length difference. Logistic regression with **no intercept**, so the model is exactly antisymmetric and positional bias is impossible. |
+| **PolicyInduction** | 10 rounds generate ≤15 comparative rules from 20 labelled pairs each; a scorer answers every rule YES/NO per pair; L1 logistic regression on those bits. Every prompt is the library default except the task description. |
+| **control** | Identical pipeline with induction removed — one hand-written prompt ("Argument A is more persuasive…") replaces the induced rules. Isolates whether induction contributes anything. |
+| **Tan et al. 2016** | Quoted from the paper, not run here. Their classifier compares the two replies as a pair and trains on all 3,456. |
 
-n=807 → **SE ≈ 1.7pp**. Gaps under ~4pp are not real.
+Every LLM run scores each heldout pair in **both orders** and averages, which
+cancels positional bias. Pairs where both orders name the same slot score 0.5.
 
-## Running
+## Results
+
+`root_reply`, seed 0, 807 heldout pairs.
+
+| Method | Train pairs | Scorer | Accuracy |
+|---|---|---|---|
+| Tan et al. 2016 | 3,456 | — | 0.6510 |
+| embeddings + cos + length | 3,456 | — | 0.6481 |
+| embeddings only | 3,456 | — | 0.6394 |
+| embeddings + cos + length | 500 | — | 0.6344 |
+| **PolicyInduction, 15 rules** | **500** | **gemini-3.5-flash** | **0.6241** |
+| word count | — | — | 0.5967 |
+| BoW, argument only | 150 | — | 0.5849 |
+| control, one prompt | 100 | gemini-2.5-flash-lite | 0.5509 |
+| PolicyInduction, 15 rules | 500 | gemini-2.5-flash-lite | 0.4963 |
+
+Word count by condition: 0.5967 / 0.6543 / 0.5000.
+BoW argument-only by condition: 0.5849 / 0.6530 / 0.5725.
+
+### Notes
+
+- **The scorer decides the outcome.** Same pipeline, same 500 pairs, only the
+  model answering the rules changed: 0.4963 → 0.6241. Fire rates went from 9 of
+  15 below 5% to all 15 in the 51–57% range; per-rule lift from ≤7.9pp to
+  20.9–24.3pp. Not a clean ablation — that run also regenerated the rules.
+- **PolicyInduction is statistically level with the embedding baseline** (−0.6
+  SE) and with Tan et al. (−1.5 SE), beats the control (+4.2 SE), and is +1.6 SE
+  over word count.
+- **The control was undecided on 55.6% of pairs** — both orders named the same
+  slot. On the 358 it did decide, accuracy was 0.6145.
+- **cos(post, reply) carries nothing** (0.4919 / 0.5087). The dense analogue of
+  Tan's word-overlap feature does not reproduce it.
+- **Embeddings are not just length.** Correlation with log-length difference is
+  0.635, but on the quartile of pairs closest in length, word count falls to
+  0.5074 while embeddings hold 0.5990.
+- **The 15 rules are highly redundant.** Each scores 0.604–0.622 alone; together
+  0.6241, and refitting weights on heldout itself reaches only 0.6303.
+- **Cross-validated accuracy runs ~3pp optimistic**, because the length signal
+  is stronger in the training period (word count 0.6306 train vs 0.5967
+  heldout). Quote heldout numbers only.
+
+## Run
 
 ```bash
-# 1. free — do these first
+tar -xjf experiments/cmv/data/cmv.tar.bz2 -C experiments/cmv/data README pair_task/
+```
+
+```bash
 python experiments/cmv/prepare_data.py
 python experiments/cmv/baselines.py
-
-# 2. cost estimate, zero API calls
-python experiments/cmv/run_policy_induction.py --dry-run
-
-# 3. the run: ~1,900 calls
-python experiments/cmv/run_policy_induction.py --condition root_reply --seed 0
-
-# 4. the control: one generic prompt, no rules, ~1,600 calls
-python experiments/cmv/run_policy_induction.py --control --condition root_reply
-
-# 5. rule set, Tan mapping, accuracy table
+python experiments/cmv/embedding_baseline.py
+python experiments/cmv/run_policy_induction.py --condition root_reply --seed 0 --predict-model gemini-3.5-flash
+python experiments/cmv/run_policy_induction.py --control --condition root_reply --n-train-pairs 100
 python experiments/cmv/analyze.py
 ```
 
-Full matrix (3 conditions × 3 seeds + 3 controls) is ~22k calls before cache
-hits. `--n-eval-pairs 100` cuts a scouting run to ~250.
+`--dry-run` estimates cost with zero calls. Rules run ≈ 2,125 calls (11
+generation, 500 fit scoring, 1,614 predict); control ≈ 1,714; embeddings ≈
+11,600, cached to `data/embeddings_*.npz`. LLM responses are sqlite-cached on
+the exact prompt including the model name.
 
-### Caching
+Generation runs at `temperature=1.0` and `random_state` seeds sampling only, so
+re-running regenerates different rules. Use ≥3 seeds before believing any gap.
 
-`cache_llm.py` wraps the LLM in a sqlite cache keyed on the exact prompt —
-effectively **(rule, text)**, but also separating model and temperature, which a
-bare (rule, text) key would collide. Re-runs and overlapping conditions are free.
-Cache hits report `total_tokens=0` so spend is not overstated. Disable with
-`--no-cache`.
-
-### Models
-
-`--gen-model` (strong, writes policies) defaults to `gemini-3.5-flash`;
-`--predict-model` (cheap, evaluates each rule per unit) to
-`gemini-2.5-flash-lite`. Rule evaluation is >90% of the calls.
-
-## The control
-
-`--control` scores every unit with **one** generic prompt —
-
-> *"This argument is persuasive enough to change the original poster's mind and
-> earn a delta."*
-
-— and no induction. **If the rule set does not beat this by more than ~4pp, the
-induction did nothing** and the rules are decorative. `analyze.py` computes the
-gap and says so outright.
-
-## Known gaps
-
-- **Rule↔Tan mapping is keyword-based**, so it is a first pass for manual
-  review, not a verdict. `analyze.py --verbose` prints matched terms.
-- **`op_text` truncated to 200 words** by default (`--op-words 0` for full).
-  Some OPs run past 5,000 characters, and it is repeated in every scoring call.
-- **542 distinct OPs across 807 heldout pairs** — some OPs appear in multiple
-  pairs, so pairs are not fully independent. Train and heldout are separate time
-  periods, so there is no train/test leakage.
-- **Generation runs at `temperature=1.0`.** Use ≥3 seeds before believing any
-  gap.
+Data source: the canonical URL is dead; `data/cmv.tar.bz2` came from the
+[2022-12-26 Wayback snapshot](https://web.archive.org/web/20221226140424id_/https://chenhaot.com/data/cmv/cmv.tar.bz2),
+v1.0.

@@ -132,14 +132,19 @@ def main() -> None:
     df = pd.DataFrame(
         [
             {"mode": r["mode"], "condition": r["condition"], "seed": r["seed"],
+             # Runs predating the paired formulation carry no such field.
+             "formulation": r.get("formulation", "pointwise"),
              "acc": r["pairwise_accuracy"], "n": r["n_pairs_scored"],
              "nz": r.get("n_policies_nonzero"), "gen": r.get("n_policies_generated")}
             for r in runs
         ]
     )
     print(f"\n{'PolicyInduction':22s} " + " ".join(f"{c:>16s}" for c in CONDITIONS))
-    for mode in ("rules", "control"):
-        sub = df[df["mode"] == mode]
+    # Paired and pointwise are different experiments and must never be averaged
+    # into one cell.
+    for form, mode in [(f, m) for f in ("paired", "pointwise")
+                       for m in ("rules", "control")]:
+        sub = df[(df["mode"] == mode) & (df["formulation"] == form)]
         if sub.empty:
             continue
         cells = []
@@ -151,19 +156,23 @@ def main() -> None:
                 cells.append(f"{s.iloc[0]:16.4f}")
             else:
                 cells.append(f"{s.mean():10.4f}±{s.std():.3f}")
-        print(f"{mode + ' (mean of ' + str(len(sub)) + ')':22s} " + " ".join(cells))
+        label = f"{form}/{mode} (n={len(sub)})"
+        print(f"{label:22s} " + " ".join(cells))
 
     print("\nreference points:")
     for k, v in REFERENCE.items():
         print(f"  {v:.4f}  {k}")
 
-    rules_acc = df[(df["mode"] == "rules") & (df["condition"] == "root_reply")]["acc"]
-    ctrl_acc = df[(df["mode"] == "control") & (df["condition"] == "root_reply")]["acc"]
-    if not rules_acc.empty and not ctrl_acc.empty:
+    for form in ("paired", "pointwise"):
+        f_df = df[(df["formulation"] == form) & (df["condition"] == "root_reply")]
+        rules_acc = f_df[f_df["mode"] == "rules"]["acc"]
+        ctrl_acc = f_df[f_df["mode"] == "control"]["acc"]
+        if rules_acc.empty or ctrl_acc.empty:
+            continue
         gap = rules_acc.mean() - ctrl_acc.mean()
         verdict = "induction added signal" if gap > 0.04 else \
                   "NOT distinguishable from the no-rule control"
-        print(f"\n  rules - control on root_reply: {gap:+.4f}  ->  {verdict}")
+        print(f"\n  [{form}] rules - control on root_reply: {gap:+.4f}  ->  {verdict}")
         print("  (a gap under ~4pp is within noise at n=807)")
 
     # ── 2 + 3. rules and the Tan mapping ──────────────────────────────────────
