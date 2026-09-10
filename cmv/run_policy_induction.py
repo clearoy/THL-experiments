@@ -313,12 +313,30 @@ async def main_async(args: argparse.Namespace) -> None:
         control_policy = CONTROL_POLICY_POINTWISE
         n_eval_pairs = heldout["pair_id"].nunique()
 
-    # Training size is in the tag: without it, runs of different sizes share a
-    # directory and a results file, and the larger one silently overwrites the
-    # smaller instead of sitting next to it as a ladder point.
+    # Every knob that has been observed to move a result goes in the tag, so two
+    # runs that differ in any of them land in different directories and different
+    # results files instead of one silently overwriting the other. Swapping the
+    # scoring model alone moved accuracy 12.8pp here, and it used to be invisible
+    # in the name.
     n_train = args.n_train_pairs if paired else args.n_train_units
-    tag = (f"{'control' if args.control else 'rules'}_{args.formulation}"
-           f"_{args.condition}_n{n_train}_seed{args.seed}")
+    # Alphanumeric and underscores only: PolicyInduction rejects anything else in
+    # `name`, so a hyphenated model slug crashes the run before the first call.
+    slug = lambda mdl: "".join(
+        c for c in mdl.replace("gemini-", "").replace("-preview", "") if c.isalnum()
+    )
+    tag = "_".join(
+        [
+            "control" if args.control else "rules",
+            args.formulation,
+            args.condition,
+            f"n{n_train}",
+            f"gen{slug(args.gen_model)}",
+            f"pred{slug(args.predict_model)}",
+            f"seed{args.seed}",
+        ]
+        + (["aug"] if paired and args.augment_swap else [])
+        + ([] if paired and args.swap_eval else ["noswap"])
+    )
     outdir = HERE / "runs" / tag
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -548,7 +566,23 @@ async def main_async(args: argparse.Namespace) -> None:
     )
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{tag}.json").write_text(json.dumps(metrics, indent=2))
+    out = RESULTS_DIR / f"{tag}.json"
+    # Belt and braces. The tag covers the knobs known to matter, but a knob not
+    # in the tag (op_words, max_policies, beta, ...) could still change the
+    # result. Refuse to overwrite a result produced under a different config
+    # rather than replacing it with no trace.
+    if out.exists():
+        prev = json.loads(out.read_text()).get("config")
+        if prev and prev != metrics["config"]:
+            differing = [k for k in metrics["config"]
+                         if prev.get(k) != metrics["config"][k]]
+            raise SystemExit(
+                f"\n{out.name} already exists and was produced with a different "
+                f"config.\nDiffering keys: {', '.join(differing)}\n"
+                "Refusing to overwrite. Rename or delete the existing result, or "
+                "change a\nsetting that appears in the run tag."
+            )
+    out.write_text(json.dumps(metrics, indent=2))
     scores.to_csv(RESULTS_DIR / f"{tag}_scores.csv", index=False)
 
     print(f"\n=== {tag} ===")
