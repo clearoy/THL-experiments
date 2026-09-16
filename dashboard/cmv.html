@@ -110,6 +110,16 @@ y         : YES        &larr; means argument_A won the delta</pre>
   </tbody>
 </table>
 </div>
+
+<p class="muted">Their features are countable surface quantities, no embeddings.
+  <b>Interplay</b> measures word overlap between reply and post over three
+  vocabularies (stopwords, content words, all) &mdash; four quantities each.
+  <b>Style</b> covers articles, sentiment words, hedges, pronouns, links,
+  formatting, and readability. We reimplemented both from the paper's
+  description (<a href="https://github.com/clearoy/THL-experiments/tree/main/cmv/tan_paper">tan_paper/</a>)
+  &mdash; not a verified reproduction, since LIWC and the paper's word-norm
+  lexicons are proprietary and were substituted or omitted, but close enough
+  to use as a feature source in its own right.</p>
 <p class="muted">Their evaluation set is the same 807 heldout pairs used here,
   and this repo's word-count baseline reproduces their number to
   0.5967 / 0.6543 / 0.5000 across the three conditions &mdash; the check that the
@@ -172,8 +182,12 @@ y         : YES        &larr; means argument_A won the delta</pre>
   <tr><th scope="col">Method</th><th scope="col">Train pairs</th><th scope="col">Scorer</th><th scope="col">Accuracy</th><th scope="col"></th></tr>
   </thead>
   <tbody>
+    <tr class="hi"><td>Tan features + PolicyInduction, combined</td><td class="n">500</td><td>gemini-3.5-flash</td>
+        <td class="n">0.6551</td><td class="bar-cell"><span class="bar"><i style="width:82.0%"></i></span></td></tr>
     <tr class="base"><td>Tan et&nbsp;al. 2016</td><td class="n">3,456</td><td>&mdash;</td>
         <td class="n">0.6510</td><td class="bar-cell"><span class="bar"><i style="width:80.4%"></i></span></td></tr>
+    <tr><td>Tan features, our reimplementation</td><td class="n">3,456</td><td>&mdash;</td>
+        <td class="n">0.6481</td><td class="bar-cell"><span class="bar"><i style="width:79.2%"></i></span></td></tr>
     <tr><td>embeddings + cos + length</td><td class="n">3,456</td><td>&mdash;</td>
         <td class="n">0.6481</td><td class="bar-cell"><span class="bar"><i style="width:79.2%"></i></span></td></tr>
     <tr><td>embeddings only</td><td class="n">3,456</td><td>&mdash;</td>
@@ -182,11 +196,22 @@ y         : YES        &larr; means argument_A won the delta</pre>
         <td class="n">0.6344</td><td class="bar-cell"><span class="bar"><i style="width:73.8%"></i></span></td></tr>
     <tr class="hi"><td>PolicyInduction, 15 rules</td><td class="n">500</td><td>gemini-3.5-flash</td>
         <td class="n">0.6241</td><td class="bar-cell"><span class="bar"><i style="width:69.6%"></i></span></td></tr>
+    <tr><td>Tan features, our reimplementation</td><td class="n">500</td><td>&mdash;</td>
+        <td class="n">0.6191</td><td class="bar-cell"><span class="bar"><i style="width:67.6%"></i></span></td></tr>
     <tr class="base"><td>word count</td><td class="n">&mdash;</td><td>&mdash;</td>
         <td class="n">0.5967</td><td class="bar-cell"><span class="bar"><i style="width:58.7%"></i></span></td></tr>
   </tbody>
 </table>
 </div>
+
+<p class="muted">The combined row refits one model on Tan's 33 reimplemented
+  features plus the 15 induced policies together, on the identical 500
+  training pairs and evaluated on the same heldout pairs as the
+  PolicyInduction row above &mdash; no new API calls, since the policy answers
+  were already computed. Beats either feature set alone by more than noise
+  (z&nbsp;=&nbsp;+2.18 against Tan alone, z&nbsp;=&nbsp;+2.59 against
+  PolicyInduction refit under the same protocol). One run, one seed, like
+  everything else on this page.</p>
 
 <h3>Induced policies <span class="muted" style="font-weight:400">(all 15 given non-zero weight)</span></h3>
 
