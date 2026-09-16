@@ -219,13 +219,13 @@ def fit_eval_grouped(X, y, groups, Xte, yte) -> Dict[str, float]:
     for c in C_GRID:
         accs = []
         for tr, va in gkf.split(X, y, groups):
-            lr = LogisticRegression(C=c, solver="liblinear", l1_ratio=1.0,
+            lr = LogisticRegression(C=c, solver="liblinear", l1_ratio=1.0, random_state=0,
                                      fit_intercept=False, max_iter=3000)
             lr.fit(X[tr], y[tr])
             accs.append((lr.predict(X[va]) == y[va]).mean())
         if np.mean(accs) > best_cv:
             best_c, best_cv = c, float(np.mean(accs))
-    lr = LogisticRegression(C=best_c, solver="liblinear", l1_ratio=1.0,
+    lr = LogisticRegression(C=best_c, solver="liblinear", l1_ratio=1.0, random_state=0,
                              fit_intercept=False, max_iter=3000)
     lr.fit(X, y)
     p = lr.predict_proba(Xte)[:, 1]
