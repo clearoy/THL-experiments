@@ -1,7 +1,8 @@
 # ChangeMyView persuasion benchmark
 
 Pair task from Tan et al. 2016 (WWW). Two replies to the same post, one earned a
-delta, one did not. Pick the winner.
+delta, one did not. Pick the winner. Their approach is summarised in
+[`tan_paper/`](tan_paper/).
 
 `prepare_data.py` → `data/units_{train,heldout}.parquet`, two rows per pair.
 
@@ -11,7 +12,8 @@ delta, one did not. Pick the winner.
 | heldout | 2015-05-08 → 2015-09-01 | 807 | 1,614 |
 
 All methods are evaluated on the same 807 heldout pairs. Accuracy is pairwise,
-ties count 0.5, SE ≈ 1.8pp.
+ties count 0.5. SE on a single accuracy is ≈1.8pp; comparisons use the paired SE
+in the Significance table.
 
 ## Input
 
@@ -83,7 +85,7 @@ cancels positional bias. Pairs where both orders name the same slot score 0.5.
 
 ## Results
 
-`root_reply`, seed 0, 807 heldout pairs.
+`root_reply`, seed 0, 807 heldout pairs (806 scored).
 
 | Method | Train pairs | Scorer | Accuracy |
 |---|---|---|---|
@@ -92,6 +94,7 @@ cancels positional bias. Pairs where both orders name the same slot score 0.5.
 | embeddings only | 3,456 | — | 0.6394 |
 | embeddings + cos + length | 500 | — | 0.6344 |
 | **PolicyInduction, 15 rules** | **500** | **gemini-3.5-flash** | **0.6241** |
+| control, one prompt | 100 | gemini-3.5-flash | 0.6036 |
 | word count | — | — | 0.5967 |
 | BoW, argument only | 150 | — | 0.5849 |
 | control, one prompt | 100 | gemini-2.5-flash-lite | 0.5509 |
@@ -100,27 +103,52 @@ cancels positional bias. Pairs where both orders name the same slot score 0.5.
 Word count by condition: 0.5967 / 0.6543 / 0.5000.
 BoW argument-only by condition: 0.5849 / 0.6530 / 0.5725.
 
+### Significance
+
+Comparisons use a **paired** standard error, computed per pair, since every method
+is scored on the same 806 pairs. The ±1.8pp figure is the error on a *single*
+accuracy and should not be used to compare rows.
+
+| Comparison | Difference | Paired SE | z |
+|---|---|---|---|
+| flash scorer vs flash-lite scorer | +0.1321 | 0.0206 | 6.40 |
+| rules vs control, **both on flash** | +0.0205 | 0.0120 | 1.71 |
+| rules vs word count | +0.0279 | 0.0217 | 1.29 |
+| rules vs embeddings at 500 | −0.0149 | 0.0200 | −0.74 |
+
 ### Notes
 
-- **The scorer decides the outcome.** Same pipeline, same 500 pairs, only the
-  model answering the rules changed: 0.4963 → 0.6241. Fire rates went from 9 of
-  15 below 5% to all 15 in the 51–57% range; per-rule lift from ≤7.9pp to
-  20.9–24.3pp. Not a clean ablation — that run also regenerated the rules.
-- **PolicyInduction is statistically level with the embedding baseline** (−0.6
-  SE) and with Tan et al. (−1.5 SE), beats the control (+4.2 SE), and is +1.6 SE
-  over word count.
-- **The control was undecided on 55.6% of pairs** — both orders named the same
-  slot. On the 358 it did decide, accuracy was 0.6145.
+- **The scorer decides the outcome.** Same pipeline, same 500 training pairs, same
+  no-augmentation setting; only the model answering the rules changed: 0.4963 →
+  0.6241, z = 6.40. Fire rates went from 9 of 15 below 5% to all 15 in the 51–57%
+  range; per-rule lift from ≤7.9pp to 20.9–24.3pp. Not a clean ablation — that run
+  also regenerated the rules.
+- **Induction is not yet shown to beat a single prompt.** On a matched scorer the
+  gap is 2.1pp, z = 1.71. The earlier 7.3pp gap compared flash rules against a
+  flash-lite control and was confounded by the variable that dominates everything
+  else.
+- **Nor is it separated from counting words**, at z = 1.29.
+- **The flash-lite control was undecided on 55.6% of pairs** — both orders named
+  the same slot. On the 358 it did decide, accuracy was 0.6145. On flash the
+  undecided share falls to 23%.
 - **cos(post, reply) carries nothing** (0.4919 / 0.5087). The dense analogue of
-  Tan's word-overlap feature does not reproduce it.
+  Tan's word-overlap feature does not reproduce it, because the real signal is
+  content-word divergence *plus* stopword similarity and a single cosine cancels
+  the two.
 - **Embeddings are not just length.** Correlation with log-length difference is
   0.635, but on the quartile of pairs closest in length, word count falls to
   0.5074 while embeddings hold 0.5990.
 - **The 15 rules are highly redundant.** Each scores 0.604–0.622 alone; together
   0.6241, and refitting weights on heldout itself reaches only 0.6303.
-- **Cross-validated accuracy runs ~3pp optimistic**, because the length signal
-  is stronger in the training period (word count 0.6306 train vs 0.5967
-  heldout). Quote heldout numbers only.
+- **Training fit is not recorded** by the pipeline, only the cross-validated
+  F-beta. Computed from the saved artifacts, the flash run scores 0.7020 accuracy
+  and 0.7118 AUC on its 500 training rows, against 0.6241 / 0.6436 on heldout.
+- **Cross-validated accuracy runs ~3pp optimistic**, because the length signal is
+  stronger in the training period (word count 0.6306 train vs 0.5967 heldout).
+  Quote heldout numbers only.
+- **A and B are rarely the same length** on `root_reply`: 1 pair in 807. The median
+  pair has one reply 1.73× the other. Only `root_truncated` closes that channel,
+  and PolicyInduction has never been run on it.
 
 ## Run
 
@@ -133,7 +161,7 @@ python experiments/cmv/prepare_data.py
 python experiments/cmv/baselines.py
 python experiments/cmv/embedding_baseline.py
 python experiments/cmv/run_policy_induction.py --condition root_reply --seed 0 --predict-model gemini-3.5-flash
-python experiments/cmv/run_policy_induction.py --control --condition root_reply --n-train-pairs 100
+python experiments/cmv/run_policy_induction.py --control --condition root_reply --n-train-pairs 100 --predict-model gemini-3.5-flash
 python experiments/cmv/analyze.py
 ```
 
