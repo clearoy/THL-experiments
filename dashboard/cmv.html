@@ -125,8 +125,9 @@ y         : YES        &larr; means argument_A won the delta</pre>
 </div>
 
 <p class="muted">The two replies are never shown for a holistic side-by-side
-  judgement without the swap control. Scored once, the small model named slot A
-  on 73% of pairs; averaging both orders removes that.</p>
+  judgement without the swap control. Scored in one order only, a model can name
+  the same slot regardless of which reply sits there; averaging both orders
+  removes that.</p>
 
 <h3>Run configuration</h3>
 <div class="card scroll">
@@ -168,12 +169,6 @@ y         : YES        &larr; means argument_A won the delta</pre>
         <td class="n">0.6241</td><td class="bar-cell"><span class="bar"><i style="width:69.6%"></i></span></td></tr>
     <tr class="base"><td>word count</td><td class="n">&mdash;</td><td>&mdash;</td>
         <td class="n">0.5967</td><td class="bar-cell"><span class="bar"><i style="width:58.7%"></i></span></td></tr>
-    <tr class="base"><td>BoW, argument only</td><td class="n">150</td><td>&mdash;</td>
-        <td class="n">0.5849</td><td class="bar-cell"><span class="bar"><i style="width:54.0%"></i></span></td></tr>
-    <tr><td>control &mdash; one hand-written prompt</td><td class="n">100</td><td>gemini-2.5-flash-lite</td>
-        <td class="n">0.5509</td><td class="bar-cell"><span class="bar"><i style="width:40.4%"></i></span></td></tr>
-    <tr><td>PolicyInduction, 15 rules</td><td class="n">500</td><td>gemini-2.5-flash-lite</td>
-        <td class="n">0.4963</td><td class="bar-cell"><span class="bar"><i style="width:18.5%"></i></span></td></tr>
   </table>
 </div>
 
