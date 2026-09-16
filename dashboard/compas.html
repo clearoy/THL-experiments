@@ -39,7 +39,10 @@
 <h3>Features used</h3>
 <div class="card scroll">
   <table>
-    <tr><th>Feature</th><th>Meaning</th></tr>
+  <thead>
+  <tr><th scope="col">Feature</th><th scope="col">Meaning</th></tr>
+  </thead>
+  <tbody>
     <tr><td><code>sex</code></td><td>Male / Female</td></tr>
     <tr><td><code>age_years</code></td><td>Age at screening (18&ndash;96)</td></tr>
     <tr><td><code>age_group</code></td><td>under 25 / 25 to 45 / over 45</td></tr>
@@ -48,7 +51,8 @@
     <tr><td><code>juvenile_misdemeanor_convictions</code></td><td>Juvenile misdemeanors</td></tr>
     <tr><td><code>juvenile_other_offenses</code></td><td>Other juvenile offenses</td></tr>
     <tr><td><code>current_charge_severity</code></td><td>Felony / Misdemeanor</td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <p class="muted">Excluded: COMPAS's own risk scores and post-outcome fields
@@ -81,7 +85,10 @@ current_charge_severity: Felony        &rarr; one YES/NO answer per policy id</p
 <h3>Papers evaluating ML on this dataset</h3>
 <div class="card scroll">
   <table>
-    <tr><th>Paper</th><th>Contribution</th><th>Accuracy</th></tr>
+  <thead>
+  <tr><th scope="col">Paper</th><th scope="col">Contribution</th><th scope="col">Accuracy</th></tr>
+  </thead>
+  <tbody>
     <tr><td><a href="https://www.propublica.org/article/how-we-analyzed-the-compas-recidivism-algorithm">Angwin et&nbsp;al. 2016</a><br><span class="pos">ProPublica</span></td>
         <td>Released the dataset; found racial disparity in error rates</td>
         <td class="n">&mdash;</td></tr>
@@ -93,21 +100,26 @@ current_charge_severity: Felony        &rarr; one YES/NO answer per policy id</p
         <td class="n">66.6%</td></tr>
     <tr class="base"><td>COMPAS commercial tool</td><td>137-item proprietary questionnaire</td><td class="n">65.4%</td></tr>
     <tr class="base"><td>Untrained humans (Dressel &amp; Farid)</td><td>Mechanical Turk workers</td><td class="n">62.8%</td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <h2>2 &nbsp;How the test is implemented</h2>
 
 <div class="card">
   <table>
-    <tr><th>Step</th><th>Detail</th></tr>
+  <thead>
+  <tr><th scope="col">Step</th><th scope="col">Detail</th></tr>
+  </thead>
+  <tbody>
     <tr><td>Filter</td><td>ProPublica's published filter &rarr; 6,172 rows</td></tr>
     <tr><td>Split</td><td>Stratified 70/30, <code>random_state=0</code> &rarr; 4,320 / 1,852</td></tr>
     <tr><td>Train</td><td>First <b>500</b> training rows (what the LLM method can afford)</td></tr>
     <tr><td>Test</td><td>All <b>1,852</b> rows &mdash; identical for every model</td></tr>
     <tr><td>Baselines</td><td>Fitted twice: on all 4,320 and on the same 500</td></tr>
     <tr><td>Encoding</td><td>sklearn: one-hot &rarr; 12 cols &nbsp;&middot;&nbsp; PolicyInduction: <code>column: value</code> text</td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <p class="muted">Both methods receive identical inputs, so any difference is
@@ -117,16 +129,16 @@ current_charge_severity: Felony        &rarr; one YES/NO answer per policy id</p
 <h3>Run configuration</h3>
 <div class="card scroll">
   <table>
-    <tr><th>Generation model</th><td>gemini-3.5-flash</td>
-        <th>Scoring model</th><td>gemini-2.5-flash-lite</td></tr>
-    <tr><th>max_policies</th><td class="n">20</td>
-        <th>samples_per_batch</th><td class="n">20</td></tr>
-    <tr><th>max_gen_batches</th><td class="n">7</td>
-        <th>policy_batch_size</th><td class="n">10</td></tr>
-    <tr><th>beta</th><td class="n">0.5</td>
-        <th>penalty</th><td>L1</td></tr>
-    <tr><th>Decision threshold</th><td class="n">0.51</td>
-        <th>LLM calls</th><td class="n">~4,700</td></tr>
+    <tr><th id="compas-t3r0c0">Generation model</th><td headers="compas-t3r0c0">gemini-3.5-flash</td>
+        <th id="compas-t3r0c2">Scoring model</th><td headers="compas-t3r0c2">gemini-2.5-flash-lite</td></tr>
+    <tr><th id="compas-t3r1c0">max_policies</th><td headers="compas-t3r1c0" class="n">20</td>
+        <th id="compas-t3r1c2">samples_per_batch</th><td headers="compas-t3r1c2" class="n">20</td></tr>
+    <tr><th id="compas-t3r2c0">max_gen_batches</th><td headers="compas-t3r2c0" class="n">7</td>
+        <th id="compas-t3r2c2">policy_batch_size</th><td headers="compas-t3r2c2" class="n">10</td></tr>
+    <tr><th id="compas-t3r3c0">beta</th><td headers="compas-t3r3c0" class="n">0.5</td>
+        <th id="compas-t3r3c2">penalty</th><td headers="compas-t3r3c2">L1</td></tr>
+    <tr><th id="compas-t3r4c0">Decision threshold</th><td headers="compas-t3r4c0" class="n">0.51</td>
+        <th id="compas-t3r4c2">LLM calls</th><td headers="compas-t3r4c2" class="n">~4,700</td></tr>
   </table>
 </div>
 
@@ -136,8 +148,11 @@ current_charge_severity: Felony        &rarr; one YES/NO answer per policy id</p
 
 <div class="card scroll">
   <table>
-    <tr><th>Model</th><th>Train rows</th><th>Accuracy</th><th>F1</th>
-        <th>Precision</th><th>Recall</th><th>ROC-AUC</th></tr>
+  <thead>
+  <tr><th scope="col">Model</th><th scope="col">Train rows</th><th scope="col">Accuracy</th><th scope="col">F1</th>
+        <th scope="col">Precision</th><th scope="col">Recall</th><th scope="col">ROC-AUC</th></tr>
+  </thead>
+  <tbody>
     <tr class="base"><td>logistic_regression</td><td class="n">4,320</td><td class="n">0.6830</td><td class="n">0.6268</td><td class="n">0.6753</td><td class="n">0.5848</td><td class="n">0.7339</td></tr>
     <tr class="base"><td>gradient_boosting</td><td class="n">4,320</td><td class="n">0.6809</td><td class="n">0.6363</td><td class="n">0.6611</td><td class="n">0.6133</td><td class="n">0.7401</td></tr>
     <tr class="base"><td>random_forest</td><td class="n">4,320</td><td class="n">0.6409</td><td class="n">0.5887</td><td class="n">0.6150</td><td class="n">0.5647</td><td class="n">0.6798</td></tr>
@@ -146,7 +161,8 @@ current_charge_severity: Felony        &rarr; one YES/NO answer per policy id</p
     <tr><td>gradient_boosting</td><td class="n">500</td><td class="n">0.6544</td><td class="n">0.5784</td><td class="n">0.6504</td><td class="n">0.5208</td><td class="n">0.7043</td></tr>
     <tr><td>random_forest</td><td class="n">500</td><td class="n">0.6339</td><td class="n">0.5789</td><td class="n">0.6076</td><td class="n">0.5528</td><td class="n">0.6646</td></tr>
     <tr class="base"><td>majority class (all NO)</td><td class="n">&mdash;</td><td class="n">0.5448</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td><td class="n">&mdash;</td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <h3>Induced policies <span class="muted" style="font-weight:400">(10 of 15 given non-zero weight)</span></h3>

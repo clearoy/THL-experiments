@@ -69,8 +69,11 @@
 
 <div class="card scroll">
   <table>
-    <tr><th>Benchmark</th><th>Task</th><th>Test set</th><th>PolicyInduction</th>
-        <th>Best comparable</th><th>Trivial baseline</th></tr>
+  <thead>
+  <tr><th scope="col">Benchmark</th><th scope="col">Task</th><th scope="col">Test set</th><th scope="col">PolicyInduction</th>
+        <th scope="col">Best comparable</th><th scope="col">Trivial baseline</th></tr>
+  </thead>
+  <tbody>
     <tr><td><a href="compas.html">COMPAS</a></td>
         <td>Re-arrest within 2 years</td>
         <td class="n">1,852 rows</td>
@@ -83,7 +86,8 @@
         <td class="n">0.6241</td>
         <td class="n">0.6344 <span class="pos">embeddings, 500 pairs</span></td>
         <td class="n">0.5967 <span class="pos">word count</span></td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <footer>

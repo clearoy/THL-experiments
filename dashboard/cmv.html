@@ -50,11 +50,15 @@
 <h3>Text conditions</h3>
 <div class="card scroll">
   <table>
-    <tr><th>Condition</th><th>Argument text</th><th>Word-count baseline</th></tr>
+  <thead>
+  <tr><th scope="col">Condition</th><th scope="col">Argument text</th><th scope="col">Word-count baseline</th></tr>
+  </thead>
+  <tbody>
     <tr class="hi"><td><code>root_reply</code></td><td>The root comment only &mdash; primary condition</td><td class="n">0.5967</td></tr>
     <tr><td><code>full_path</code></td><td>Every comment by that author in the branch</td><td class="n">0.6543</td></tr>
     <tr><td><code>root_truncated</code></td><td>Both roots cut to the shorter one's word count</td><td class="n">0.5000</td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <p class="muted">Winning replies are longer &mdash; 190 median words against 155
@@ -94,13 +98,17 @@ y         : YES        &larr; means argument_A won the delta</pre>
 <h3>Published results on this task</h3>
 <div class="card scroll">
   <table>
-    <tr><th>Paper</th><th>Contribution</th><th>Accuracy</th></tr>
+  <thead>
+  <tr><th scope="col">Paper</th><th scope="col">Contribution</th><th scope="col">Accuracy</th></tr>
+  </thead>
+  <tbody>
     <tr><td><a href="https://arxiv.org/abs/1602.01103">Tan et&nbsp;al. 2016</a><br><span class="pos">WWW &middot; released the corpus</span></td>
         <td>Interplay, style, bag-of-words and POS features; paired logistic regression on all 3,456 training pairs</td>
         <td class="n">65.1%</td></tr>
     <tr class="base"><td>#words baseline (their paper)</td>
         <td>Longer reply wins</td><td class="n">59.6%</td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 <p class="muted">Their evaluation set is the same 807 heldout pairs used here,
   and this repo's word-count baseline reproduces their number to
@@ -113,7 +121,10 @@ y         : YES        &larr; means argument_A won the delta</pre>
 
 <div class="card">
   <table>
-    <tr><th>Step</th><th>Detail</th></tr>
+  <thead>
+  <tr><th scope="col">Step</th><th scope="col">Detail</th></tr>
+  </thead>
+  <tbody>
     <tr><td>Formulation</td><td>One row per pair; label <code>YES</code> means <code>argument_A</code> won</td></tr>
     <tr><td>Slot assignment</td><td>Randomised exactly 50/50, so position carries no signal</td></tr>
     <tr><td>Train</td><td><b>500</b> pairs, stratified, nested draw &mdash; the LLM budget</td></tr>
@@ -121,7 +132,8 @@ y         : YES        &larr; means argument_A won the delta</pre>
     <tr><td>Decision</td><td>Probability &gt; 0.50. Not the fitted F-beta threshold: swapping the two replies must flip the answer, and only a 0.50 cut respects that</td></tr>
     <tr><td>Positional control</td><td>Every pair scored in <b>both orders</b> and averaged; pairs where both orders name the same slot score 0.5</td></tr>
     <tr><td>Metric</td><td>Pairwise accuracy, ties 0.5</td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <p class="muted">The two replies are never shown for a holistic side-by-side
@@ -132,16 +144,16 @@ y         : YES        &larr; means argument_A won the delta</pre>
 <h3>Run configuration</h3>
 <div class="card scroll">
   <table>
-    <tr><th>Generation model</th><td>gemini-3.5-flash</td>
-        <th>Scoring model</th><td>gemini-3.5-flash</td></tr>
-    <tr><th>max_policies</th><td class="n">15</td>
-        <th>samples_per_batch</th><td class="n">20</td></tr>
-    <tr><th>max_gen_batches</th><td class="n">10</td>
-        <th>policy_batch_size</th><td class="n">15</td></tr>
-    <tr><th>beta</th><td class="n">0.5</td>
-        <th>penalty</th><td>L1</td></tr>
-    <tr><th>op_view truncation</th><td class="n">300 words</td>
-        <th>LLM calls</th><td class="n">~2,125</td></tr>
+    <tr><th id="cmv-t3r0c0">Generation model</th><td headers="cmv-t3r0c0">gemini-3.5-flash</td>
+        <th id="cmv-t3r0c2">Scoring model</th><td headers="cmv-t3r0c2">gemini-3.5-flash</td></tr>
+    <tr><th id="cmv-t3r1c0">max_policies</th><td headers="cmv-t3r1c0" class="n">15</td>
+        <th id="cmv-t3r1c2">samples_per_batch</th><td headers="cmv-t3r1c2" class="n">20</td></tr>
+    <tr><th id="cmv-t3r2c0">max_gen_batches</th><td headers="cmv-t3r2c0" class="n">10</td>
+        <th id="cmv-t3r2c2">policy_batch_size</th><td headers="cmv-t3r2c2" class="n">15</td></tr>
+    <tr><th id="cmv-t3r3c0">beta</th><td headers="cmv-t3r3c0" class="n">0.5</td>
+        <th id="cmv-t3r3c2">penalty</th><td headers="cmv-t3r3c2">L1</td></tr>
+    <tr><th id="cmv-t3r4c0">op_view truncation</th><td headers="cmv-t3r4c0" class="n">300 words</td>
+        <th id="cmv-t3r4c2">LLM calls</th><td headers="cmv-t3r4c2" class="n">~2,125</td></tr>
   </table>
 </div>
 <p class="muted">Every prompt is the library default except the task description,
@@ -156,7 +168,10 @@ y         : YES        &larr; means argument_A won the delta</pre>
 
 <div class="card scroll">
   <table>
-    <tr><th>Method</th><th>Train pairs</th><th>Scorer</th><th>Accuracy</th><th></th></tr>
+  <thead>
+  <tr><th scope="col">Method</th><th scope="col">Train pairs</th><th scope="col">Scorer</th><th scope="col">Accuracy</th><th scope="col"></th></tr>
+  </thead>
+  <tbody>
     <tr class="base"><td>Tan et&nbsp;al. 2016</td><td class="n">3,456</td><td>&mdash;</td>
         <td class="n">0.6510</td><td class="bar-cell"><span class="bar"><i style="width:80.4%"></i></span></td></tr>
     <tr><td>embeddings + cos + length</td><td class="n">3,456</td><td>&mdash;</td>
@@ -169,7 +184,8 @@ y         : YES        &larr; means argument_A won the delta</pre>
         <td class="n">0.6241</td><td class="bar-cell"><span class="bar"><i style="width:69.6%"></i></span></td></tr>
     <tr class="base"><td>word count</td><td class="n">&mdash;</td><td>&mdash;</td>
         <td class="n">0.5967</td><td class="bar-cell"><span class="bar"><i style="width:58.7%"></i></span></td></tr>
-  </table>
+  </tbody>
+</table>
 </div>
 
 <h3>Induced policies <span class="muted" style="font-weight:400">(all 15 given non-zero weight)</span></h3>

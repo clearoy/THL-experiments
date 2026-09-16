@@ -83,3 +83,15 @@ tr.base .bar i{opacity:.28}
 .verdict{display:inline-block;font-size:11px;text-transform:uppercase;
          letter-spacing:.06em;font-weight:600;padding:2px 8px;border-radius:99px;
          background:var(--accent-soft);color:var(--accent);margin-top:12px}
+
+/* ── keyboard focus ───────────────────────────────────────────────────────
+   Nav links carry a transparent border and a hover background, so the browser
+   default ring lands on an element that already looks bordered. An explicit
+   indicator, offset clear of the element, is the only reliable one. Scoped to
+   :focus-visible so it appears for keyboard use and not on mouse clicks. */
+:where(a, button, [tabindex]):focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+  border-radius:4px;
+}
+nav a:focus-visible{ background:var(--accent-soft); color:var(--ink) }
